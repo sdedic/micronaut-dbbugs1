@@ -3,6 +3,7 @@ package com.example;
 import com.example.dao.BooksDao;
 import com.example.model.Book;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
 import java.sql.SQLException;
@@ -12,7 +13,7 @@ public class DatabaseSetup {
     BooksDao booksDao;
 
     @Inject
-    public DatabaseSetup(BooksDao booksDao) {
+    public DatabaseSetup(@Named("nonTransactional") BooksDao booksDao) {
         this.booksDao = booksDao;
     }
 

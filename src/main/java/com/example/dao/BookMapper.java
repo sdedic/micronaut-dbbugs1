@@ -14,12 +14,17 @@ public class BookMapper implements RowMapper<Book> {
      * opened.
      */
     public static final ThreadLocal<Semaphore>  locker = new ThreadLocal<>();
+    public static final ThreadLocal<Semaphore> toRelease = new ThreadLocal<>();
 
     @Override
     public Book map(ResultSet rs, StatementContext ctx) throws SQLException {
         Semaphore s = locker.get();
+        Semaphore s2 = toRelease.get();
         try {
             // block the resultset processing, so a concurrent thread may step in
+            if (s2 != null) {
+                s2.release(100);
+            }
             if (s != null) {
                 s.acquire();
             }

@@ -17,6 +17,9 @@ public interface BooksDao {
     @Transaction(TransactionIsolationLevel.READ_COMMITTED)
     public List<Book> listAll();
 
+    @SqlQuery("SELECT * FROM Books")
+    @UseRowMapper(BookMapper.class)
+    public List<Book> listNoTransaction();
 
     @SqlUpdate("""
         INSERT INTO Books (ID, NAME) VALUES (:id, :name)

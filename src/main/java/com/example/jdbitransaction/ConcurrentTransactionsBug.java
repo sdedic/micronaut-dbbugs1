@@ -3,9 +3,10 @@ package com.example.jdbitransaction;
 import com.example.dao.BookMapper;
 import com.example.dao.BooksDao;
 import com.example.model.Book;
-import io.micronaut.scheduling.TaskScheduler;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
+import org.jdbi.v3.core.Handle;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
@@ -14,33 +15,67 @@ import java.util.concurrent.Semaphore;
 
 @Singleton
 public class ConcurrentTransactionsBug {
-    BooksDao booksDao;
+    final BooksDao nonTransactional;
+
+    final BooksDao withTransaction;
 
     @Inject
-    public ConcurrentTransactionsBug(BooksDao booksDao) {
-        this.booksDao = booksDao;
+    public ConcurrentTransactionsBug(
+            @Named("nonTransactional") BooksDao booksDao,
+            @Named("transactions") BooksDao withTransaction) {
+        this.nonTransactional = booksDao;
+        this.withTransaction = withTransaction;
     }
 
-    Semaphore semaphore = new Semaphore(0);
+    Semaphore semMain = new Semaphore(0);
+    Semaphore semThief = new Semaphore(0);
+    Semaphore semDone = new Semaphore(0);
 
     public void stealingThread() {
-        // do some transactional query
+        // once we are in our Connection context, release main thread to being a parallel transaction
+        BookMapper.toRelease.set(semMain);
+        // our Mapper will wait until semThief is released - that will be done by BookMapper of the main thread
+        BookMapper.locker.set(semThief);
+        // do some transactonal query
         try {
-            booksDao.listAll();
+            nonTransactional.listNoTransaction();
             // release the other thread working with a transaction
         } catch (Exception e) {
             LoggerFactory.getLogger(ConcurrentTransactionsBug.class).error("Error", e);
         } finally {
-            semaphore.release(100);
+            // our job completed (hopefully with exception), release the main thread
+            semDone.release(100);
         }
     }
 
-    public void makeConcurrentTransactions() throws Exception {
-//        CompletableFuture<?> f = CompletableFuture.runAsync(this::stealingThread);
-//        BookMapper.locker.set(semaphore);
+    /**
+     * Demonstrates how one thread steals a transaction from another thread.
+     * This is caused by a buggy lookup in {@link io.micronaut.configuration.jdbi.transaction.micronaut.MicronautDataTransactionHandler#getTransactionStatus}
+     * Since it uses Handle as a key for Lookup. Handles for the same Jdbi injectable Bean use the
+     * SAME instance of ContextualConnection and its {@link Handle#equals(Object)} compares the Jdbi
+     * (is the same) and Connection (is the SAME instance) for all Handles created by Jdbi instance.
+     *
+     * Therefore, queries like isInTransaction() and other operations of MicronautDataTransactionHandler
+     * are likely to mix threads together.
+     *
+     * Timing is critical. A transactionless query must start before a concurrent transaction
+     * on the same Connection starts, and must end before that concurrent transaction commits.
+     * To do so, we use Semaphores to establish that timing.
+     * The offspring thread executes first, and its RowMapper releases this main thread to
+     * create the transanction. The main thread stops and is released only after the
+     *
+     * @throws Exception
+     */
+    public void transactionStealedFromOtherThread() throws Exception {
+        CompletableFuture<?> f = CompletableFuture.runAsync(this::stealingThread);
+        // wait until the transactionless thread is in the middle of its work
+        semMain.acquire();
 
-        List<Book> books = booksDao.listAll();
-//        f.get();
+        BookMapper.toRelease.set(semThief);
+        BookMapper.locker.set(semDone);
+
+        List<Book> books = withTransaction.listAll();
+        f.get();
     }
 
     /**
@@ -61,6 +96,6 @@ public class ConcurrentTransactionsBug {
      * to connection synchronizations.
      */
     public void connectionStatusLostDuringExecution() {
-        booksDao.listAll();
+        nonTransactional.listAll();
     }
 }

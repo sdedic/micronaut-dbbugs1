@@ -1,16 +1,11 @@
 package com.example;
 
-import com.example.dao.BooksDao;
 import com.example.jdbitransaction.ConcurrentTransactionsBug;
 import io.micronaut.configuration.picocli.PicocliRunner;
-import io.micronaut.context.annotation.Factory;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
-import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
-import io.micronaut.runtime.Micronaut;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "dbbug", description = "Exhibits micronaut DB bugs",
@@ -18,13 +13,21 @@ import picocli.CommandLine;
 public class Application implements Runnable {
     static final Logger  LOG = LoggerFactory.getLogger(Application.class);
 
-    @CommandLine.Option(names = {"-1", "--connection-lost"}, description = "Demonstrates lost connection on explicit transaction")
+    @CommandLine.Option(names = {"-1", "--connection-lost"}, description = "Demonstrates stealing of transaction between concurrent threads")
+    private boolean connections;
+
+    @CommandLine.Option(names = {"-2", "--steal-transactions"}, description = "Demonstrates lost connection on explicit transaction")
     private boolean transactions;
+
     @Inject
     ConcurrentTransactionsBug concurrentTransactionsBug;
 
     @Inject
     DatabaseSetup databaseSetup;
+
+    public void setConnections(boolean connections) {
+        this.connections = connections;
+    }
 
     public void setTransactions(boolean transactions) {
         this.transactions = transactions;
@@ -42,9 +45,12 @@ public class Application implements Runnable {
     @Override
     public void run() {
         try {
-            if (transactions) {
-//                databaseSetup.fillInitialRecords();
+            if (connections) {
                 concurrentTransactionsBug.connectionStatusLostDuringExecution();
+            }
+            if (transactions) {
+                databaseSetup.fillInitialRecords();
+                concurrentTransactionsBug.transactionStealedFromOtherThread();
             }
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
