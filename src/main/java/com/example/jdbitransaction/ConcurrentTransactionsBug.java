@@ -98,4 +98,8 @@ public class ConcurrentTransactionsBug {
     public void connectionStatusLostDuringExecution() {
         nonTransactional.listAll();
     }
+
+    public void nestedTransaction() {
+        withTransaction.listAll();
+    }
 }

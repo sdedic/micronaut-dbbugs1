@@ -19,6 +19,9 @@ public class Application implements Runnable {
     @CommandLine.Option(names = {"-2", "--steal-transactions"}, description = "Demonstrates lost connection on explicit transaction")
     private boolean transactions;
 
+    @CommandLine.Option(names = {"-3", "--nested-transaction"}, description = "Demonstrates lost connection on explicit transaction")
+    private boolean nested;
+
     @Inject
     ConcurrentTransactionsBug concurrentTransactionsBug;
 
@@ -51,6 +54,9 @@ public class Application implements Runnable {
             if (transactions) {
                 databaseSetup.fillInitialRecords();
                 concurrentTransactionsBug.transactionStealedFromOtherThread();
+            }
+            if (nested) {
+                concurrentTransactionsBug.nestedTransaction();
             }
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
