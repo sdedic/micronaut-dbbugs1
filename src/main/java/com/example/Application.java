@@ -22,6 +22,9 @@ public class Application implements Runnable {
     @CommandLine.Option(names = {"-3", "--nested-transaction"}, description = "Demonstrates lost connection on explicit transaction")
     private boolean nested;
 
+    @CommandLine.Option(names = {"-4", "--default-transactions"}, description = "Demonstrates lack of transaction in @Transaction default methods")
+    private boolean defaultTransactions;
+
     @Inject
     ConcurrentTransactionsBug concurrentTransactionsBug;
 
@@ -56,7 +59,11 @@ public class Application implements Runnable {
                 concurrentTransactionsBug.transactionStealedFromOtherThread();
             }
             if (nested) {
+                databaseSetup.fillInitialRecords();
                 concurrentTransactionsBug.nestedTransaction();
+            }
+            if (defaultTransactions) {
+                concurrentTransactionsBug.noTransactionOrConnectionInDefaultMethod();
             }
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);

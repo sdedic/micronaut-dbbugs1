@@ -3,6 +3,7 @@ package com.example.jdbitransaction;
 import com.example.dao.BookMapper;
 import com.example.dao.BooksDao;
 import com.example.model.Book;
+import io.micronaut.transaction.TransactionOperations;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -19,12 +20,17 @@ public class ConcurrentTransactionsBug {
 
     final BooksDao withTransaction;
 
+    final TransactionOperations manager;
+
     @Inject
     public ConcurrentTransactionsBug(
             @Named("nonTransactional") BooksDao booksDao,
-            @Named("transactions") BooksDao withTransaction) {
+            @Named("transactions") BooksDao withTransaction,
+            @Named("default") TransactionOperations manager
+            ) {
         this.nonTransactional = booksDao;
         this.withTransaction = withTransaction;
+        this.manager = manager;
     }
 
     Semaphore semMain = new Semaphore(0);
@@ -101,5 +107,28 @@ public class ConcurrentTransactionsBug {
 
     public void nestedTransaction() {
         withTransaction.listAll();
+    }
+
+    /**
+     * Better check for nested transactions, but requires a proper handling of default methods,
+     * which is currently broken.
+     */
+    public void nestedTransaction2() {
+        withTransaction.listNoTransaction();
+        Object txObject = nonTransactional.captureMapperTransaction(manager);
+        if (txObject == null) {
+            throw new IllegalStateException("No transaction present in @Transaction JDBI method");
+        }
+        Object mapperTxObject = BookMapper.mapperTransactionObject;
+        if (txObject == mapperTxObject) {
+            throw new IllegalStateException("Nested @Transaction is the same as outer @Transactional");
+        }
+    }
+
+    public void noTransactionOrConnectionInDefaultMethod() {
+        Object txObject = nonTransactional.captureMapperTransaction(manager);
+        if (txObject == null) {
+            throw new IllegalStateException("No transaction present in @Transaction JDBI method");
+        }
     }
 }
